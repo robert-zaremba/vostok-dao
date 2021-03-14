@@ -18,9 +18,8 @@ const STORAGE_PRICE_PER_BYTE: Balance = env::STORAGE_PRICE_PER_BYTE;
 #[near_bindgen]
 #[derive(BorshSerialize, BorshDeserialize, PanicOnDefault)]
 pub struct Contract {
-    /// Account of the owner.
     deployer_id: AccountId,
-    signers: Vec<Voter>,
+    members: Vec<Voter>,
     /// minimum support (in power) to pass the call
     min_support: u32,
     /// Each proposal voting duration must be between `min_duration` and `max_duration` expressed
@@ -35,9 +34,19 @@ pub struct Contract {
 
 #[near_bindgen]
 impl Contract {
+    /**
+    Creates a new multisig NEAR wallet.
+    Parameters:
+    + `members`: list of signers (voters) for this multisig wallet.
+    + `min_support`: minimum support a proposal have to get (in power votes) to pass.
+    + `min_duration`: minimum voting time (in number of blocks) for a new proposal.
+    + `max_duration`: maximum voting time (in number of blocks) for a new proposal.
+    + `min_bond`: minimum deposit a caller have to put to create a new proposal. It includes
+       the storage fees.
+    + NOTE: this parameters are binding for all proposals and can't be changed in the future. */
     #[init]
     pub fn new(
-        signers: Vec<Voter>,
+        members: Vec<Voter>,
         min_support: u32,
         min_duration: u32,
         max_duration: u32,
@@ -45,7 +54,7 @@ impl Contract {
     ) -> Self {
         assert!(!env::state_exists(), "ERR_CONTRACT_IS_INITIALIZED");
         assert!(min_support > 0, "min_support must be positive");
-        for s in &signers {
+        for s in &members {
             assert_valid_account(&s.account);
         }
         assert!(
@@ -60,7 +69,7 @@ impl Contract {
         );
         Self {
             deployer_id: env::predecessor_account_id(),
-            signers,
+            members,
             min_support,
             min_duration,
             max_duration,
@@ -70,6 +79,12 @@ impl Contract {
         }
     }
 
+    /**
+    Adds a new proposal. Can be called by anyone.
+    NewProposal is validated against the Contract parameters (min_duration, max_duration)
+    and the caller have to provide a deposit = max(self.min_bond, this_tx_storage_cost).
+    Once validate, the proposal is appended to the list of proposals and it's `index` is
+    returned. */
     pub fn add_proposal(&mut self, p: NewProposal) -> u32 {
         let storage_start = env::storage_usage();
         self.proposals
@@ -80,10 +95,15 @@ impl Contract {
         return self.next_idx - 1;
     }
 
+    /**
+    Vote vote and signs a given proposal. proposal_id must be a valid and active proposal.
+    Proposal is active if the current block is between proposal start and end block.
+    Only a valid signer (member of this multisig) can vote for a proposal. Each signer
+    can vote only once. */
     pub fn vote(&mut self, proposal_id: u32, vote_yes: bool) {
         let a = env::predecessor_account_id();
         let mut voter_o: Option<&Voter> = None;
-        for s in &self.signers {
+        for s in &self.members {
             if s.account == a {
                 voter_o = Some(s);
                 break;
@@ -98,6 +118,10 @@ impl Contract {
         self.refund_storage(storage_start, false);
     }
 
+    /**
+    Execute executes given proposal. A proposal can be executed only once and only after the
+    voting period passed and before the `proposal.execute_before`.
+    Anyone can call this functions. */
     pub fn execute(&mut self, proposal_id: u32) -> Promise {
         let idx: u64 = proposal_id.into();
         let p = &mut self.proposals.get(idx).expect("proposal_id not found");
