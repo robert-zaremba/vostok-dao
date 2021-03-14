@@ -1,0 +1,1 @@
+initSidebarItems({"mod":[["config",""],["proposal",""]],"struct":[["Contract",""],["ContractContract",""]]});
