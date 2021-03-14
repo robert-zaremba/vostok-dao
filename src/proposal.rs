@@ -22,6 +22,7 @@ pub struct Voter {
 #[derive(BorshSerialize, BorshDeserialize)]
 pub enum ActionInt {
     Transfer { dest: AccountId, amount: Balance },
+    Delete { dest: AccountId },
 }
 
 /// Action is a JSON compatible type for encodidng actions
@@ -30,6 +31,7 @@ pub enum ActionInt {
 #[serde(crate = "near_sdk::serde")]
 pub enum Action {
     Transfer { dest: ValidAccountId, amount: U128 },
+    Delete { dest: ValidAccountId },
 }
 
 #[cfg(test)]
@@ -37,6 +39,7 @@ pub enum Action {
 #[serde(crate = "near_sdk::serde")]
 pub enum Action {
     Transfer { dest: ValidAccountId, amount: U128 },
+    Delete { dest: ValidAccountId },
 }
 
 impl Action {
@@ -47,6 +50,9 @@ impl Action {
                 dest: dest.clone().into(),
                 amount: amount.clone().into(),
             },
+            Action::Delete { dest } => ActionInt::Delete {
+                dest: dest.clone().into(),
+            },
         }
     }
 }
@@ -55,8 +61,11 @@ impl Into<Action> for ActionInt {
     fn into(self) -> Action {
         match self {
             ActionInt::Transfer { dest, amount } => Action::Transfer {
-                dest: dest.try_into().unwrap(), // ValidAccountId { 0: dest },
+                dest: dest.try_into().unwrap(),
                 amount: amount.into(),
+            },
+            ActionInt::Delete { dest } => Action::Delete {
+                dest: dest.try_into().unwrap(),
             },
         }
     }
@@ -120,6 +129,9 @@ impl Proposal {
         self.executed = true;
         match &self.action {
             ActionInt::Transfer { dest, amount } => Promise::new(dest.clone()).transfer(*amount),
+            ActionInt::Delete { dest } => {
+                Promise::new(env::current_account_id()).delete_account(dest.clone())
+            }
         }
     }
 }
