@@ -146,10 +146,13 @@ impl Contract {
 mod tests {
     use super::*;
     use near_sdk::test_utils::{accounts, VMContextBuilder};
-    use near_sdk::BlockHeight;
-    use near_sdk::{testing_env, MockedBlockchain};
+    use near_sdk::{testing_env, BlockHeight, MockedBlockchain};
+
+    mod tutils;
+    use crate::tests::tutils::deserialize_receipts;
 
     const BASE_UNIT: Balance = STORAGE_PRICE_PER_BYTE * 20;
+    const DEFAULT_TRANSFER: Balance = 3000;
 
     fn setup_contract(min_support: u32) -> (VMContextBuilder, Contract) {
         let mut context = VMContextBuilder::new();
@@ -233,7 +236,7 @@ mod tests {
     fn test_constructor_should_work() {
         init_blockchain();
         Contract::new(Vec::new(), 10, 2, 20, BASE_UNIT.into());
-        Contract::new(Vec::new(), 10000, 2, 2000, BASE_UNIT.into());
+        Contract::new(Vec::new(), 1000, 2, 2000, BASE_UNIT.into());
         Contract::new(Vec::new(), 10, 20, 21, BASE_UNIT.into());
     }
 
@@ -272,7 +275,16 @@ mod tests {
         contract.execute(0);
         let p = contract.proposal(0);
         assert_eq!(p.executed, true);
-        // TODO: check account_4 balance
+
+        let receipts = deserialize_receipts();
+        println!("Receipts: {:?}", receipts[0]);
+        assert_eq!(receipts.len(), 1);
+        assert_eq!(receipts[0].receiver_id, AccountId::from(accounts(3)));
+        assert_eq!(receipts[0].actions.len(), 1);
+        match &receipts[0].actions[0] {
+            tutils::Action::Transfer(t) => assert_eq!(t.deposit, DEFAULT_TRANSFER),
+            _ => panic!("invalid action type"),
+        }
     }
 
     #[test]
@@ -429,7 +441,7 @@ mod tests {
         NewProposal {
             action: Action::Transfer {
                 dest: accounts(3),
-                amount: 1000.into(),
+                amount: DEFAULT_TRANSFER.into(),
             },
             description: "transfer to danny".into(),
             voting_start: 10.into(),
