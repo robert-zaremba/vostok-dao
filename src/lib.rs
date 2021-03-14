@@ -10,6 +10,9 @@ use near_sdk::{env, log, near_bindgen, AccountId, Balance, PanicOnDefault, Promi
 pub mod proposal;
 use crate::proposal::*;
 
+pub mod config;
+use crate::config::*;
+
 // a way to optimize memory management
 near_sdk::setup_alloc!();
 
@@ -140,6 +143,18 @@ impl Contract {
         p.into()
     }
 
+    /// Returns Conract configuration.
+    pub fn settings(&self) -> Settings {
+        Settings {
+            deployer_id: self.deployer_id.clone(),
+            members: serde_json::to_string(&self.members).unwrap(),
+            min_support: self.min_support,
+            min_duration: self.min_duration,
+            max_duration: self.max_duration,
+            min_bond: self.min_bond.into(),
+        }
+    }
+
     fn refund_storage(&self, initial_storage: StorageUsage, check_bond: bool) {
         let current_storage = env::storage_usage();
         let attached_deposit = env::attached_deposit();
@@ -261,7 +276,23 @@ mod tests {
         init_blockchain();
         Contract::new(Vec::new(), 10, 2, 20, BASE_UNIT.into());
         Contract::new(Vec::new(), 1000, 2, 2000, BASE_UNIT.into());
-        Contract::new(Vec::new(), 10, 20, 21, BASE_UNIT.into());
+        let ctr = Contract::new(
+            vec![Voter {
+                account: accounts(0).into(),
+                power: 3,
+            }],
+            10,
+            20,
+            21,
+            (2 * BASE_UNIT).into(),
+        );
+        let c = ctr.settings();
+        assert_eq!(c.deployer_id, "bob.near");
+        assert_eq!(c.members, "[{\"account\":\"alice\",\"power\":3}]");
+        assert_eq!(c.min_support, 10);
+        assert_eq!(c.min_duration, 20);
+        assert_eq!(c.max_duration, 21);
+        assert_eq!(c.min_bond, U128::from(2 * BASE_UNIT));
     }
 
     fn setup_with_proposal() -> (VMContextBuilder, Contract, NewProposal) {

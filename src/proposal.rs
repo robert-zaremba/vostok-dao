@@ -151,6 +151,11 @@ pub struct NewProposal {
     pub execute_before: U64,
 }
 
+/// NewProposal is an input to create a new `Proposal`.
+/// + `voting_start` must be after the current block number.
+/// + `voting_duration` must be between `Contract.min_duration` and `Contract.max_duration`.
+/// + `execute_before` is a last block number when the proposal can be closed and executed.
+///    Must be after `voting_start + voting_duration`.
 #[cfg(not(test))]
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
@@ -200,9 +205,8 @@ impl NewProposal {
     }
 }
 
-/// JSON compatible return type for Proposal
-#[cfg(not(test))]
-#[derive(Serialize, Deserialize)]
+#[cfg(test)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ProposalOut {
     pub action: Action,
@@ -217,8 +221,9 @@ pub struct ProposalOut {
     pub executed: bool,
 }
 
-#[cfg(test)]
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+/// JSON compatible return type for Proposal.
+#[cfg(not(test))]
+#[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ProposalOut {
     pub action: Action,
