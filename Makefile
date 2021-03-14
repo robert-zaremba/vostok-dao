@@ -20,6 +20,7 @@ build-doc:
 	@rm -rf docs/api
 	@cp -r target/doc/vostok_dao/ docs/
 	@for i in ayu.css brush.svg favicon* light.css main.js normalize.css noscript.css rustdoc.css rust-logo.png search-index.js source* storage.js theme.js wheel.svg ; do cp target/doc/$$i docs/; done;
+	@echo '<html> <head><meta http-equiv="refresh" content="0; url=./vostok_dao/index.html" /></head></html>' > docs/index.html
 
 build:
 	@env 'RUSTFLAGS=-C link-arg=-s' cargo build --all --lib --target wasm32-unknown-unknown --release
