@@ -1,0 +1,29 @@
+[package]
+name = "vostok-dao"
+version = "0.1.0"
+authors = ["Robert Zaremba https://zaremba.ch"]
+edition = "2018"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+codegen-units = 1
+# s = optimize for binary size ("z" would additionally turn off loop vectorization)
+opt-level = "s"
+# link time optimization
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+
+[dependencies]
+serde = { version = "*", features = ["derive"] }
+serde_json = "*"
+near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev="c926d85" } # tag="contract_cache_v0"
+uint = { version = "0.9.0", default-features = false }
+
+[dev-dependencies]
+# near-sdk-sim = { git = "https://github.com/near/near-sdk-rs.git", rev="c926d85" }
