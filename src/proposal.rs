@@ -109,7 +109,7 @@ impl Proposal {
         let b = env::block_index();
         assert!(
             self.voting_end < b && b <= self.execute_before,
-            "vote can be executed only between {} and {} block",
+            "proposal can be executed only between {} and {} block",
             self.voting_end + 1,
             self.execute_before
         );
