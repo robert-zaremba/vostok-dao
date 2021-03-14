@@ -5,7 +5,8 @@ It's made for humans and dapps to distribute funds.
 
 ## Status
 
-Alpha stage, need more tests
+Beta. Unit tests done.
+
 
 ## Name
 

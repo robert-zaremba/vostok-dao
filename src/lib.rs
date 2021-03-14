@@ -73,7 +73,7 @@ impl Contract {
     pub fn add_proposal(&mut self, p: NewProposal) -> u32 {
         let storage_start = env::storage_usage();
         self.proposals
-            .push(&p.into_proposal(self.min_duration.into(), self.max_duration.into()));
+            .push(&p.into_proposal(self.min_duration, self.max_duration));
         log!("New proposal added, id={}.", self.next_idx);
         self.next_idx += 1;
         self.refund_storage(storage_start, true);
@@ -89,7 +89,7 @@ impl Contract {
                 break;
             }
         }
-        let voter = voter_o.expect(&format!("you ({}) are not a  valid voter", a));
+        let voter = voter_o.expect(&format!("you ({}) are not authorized to vote", a));
         let idx: u64 = proposal_id.into();
         let p = &mut self.proposals.get(idx).expect("proposal_id not found");
         let storage_start = env::storage_usage();
@@ -107,7 +107,9 @@ impl Contract {
         return promise;
     }
 
-    pub fn check_proposal(&self, proposal_id: u32) -> ProposalOut {
+    /// Returns proposal by id.
+    /// Panics when `proposal_id` is not found.
+    pub fn proposal(&self, proposal_id: u32) -> ProposalOut {
         assert!(proposal_id < self.next_idx, "proposal_id not found");
         let idx: u64 = proposal_id.into();
         let p = self.proposals.get(idx).expect("proposal_id not found");
@@ -144,11 +146,14 @@ impl Contract {
 mod tests {
     use super::*;
     use near_sdk::test_utils::{accounts, VMContextBuilder};
+    use near_sdk::BlockHeight;
     use near_sdk::{testing_env, MockedBlockchain};
 
     const BASE_UNIT: Balance = STORAGE_PRICE_PER_BYTE * 20;
 
     fn setup_contract(min_support: u32) -> (VMContextBuilder, Contract) {
+        let mut context = VMContextBuilder::new();
+        testing_env!(context.build());
         let voters: Vec<Voter> = vec![
             Voter {
                 account: accounts(0).into(),
@@ -163,8 +168,6 @@ mod tests {
                 power: 4,
             },
         ];
-        let mut context = VMContextBuilder::new();
-        testing_env!(context.build());
         let contract = Contract::new(voters, min_support, 10, 20, BASE_UNIT.into());
         testing_env!(context
             .predecessor_account_id(accounts(0))
@@ -173,10 +176,16 @@ mod tests {
         (context, contract)
     }
 
-    fn attach_near(ctx: &mut VMContextBuilder, amount: Balance) {
+    fn update_context(
+        ctx: &mut VMContextBuilder,
+        account: u8,
+        deposit: Balance,
+        block: BlockHeight,
+    ) {
         testing_env!(ctx
-            .predecessor_account_id(accounts(0))
-            .attached_deposit(amount)
+            .predecessor_account_id(accounts(account.into()))
+            .attached_deposit(deposit)
+            .block_index(block)
             .build());
     }
 
@@ -228,23 +237,204 @@ mod tests {
         Contract::new(Vec::new(), 10, 20, 21, BASE_UNIT.into());
     }
 
-    #[test]
-    fn test_add_proposal() {
+    fn setup_with_proposal() -> (VMContextBuilder, Contract, NewProposal) {
         let (mut ctx, mut contract) = setup_contract(5);
-        attach_near(&mut ctx, BASE_UNIT * 300);
-        contract.add_proposal(sample_proposal());
+        // alice creates a proposal
+        update_context(&mut ctx, 0, BASE_UNIT * 300, 1);
+        let p = sample_proposal();
+        contract.add_proposal(p.clone());
+        return (ctx, contract, p);
+    }
+
+    #[test]
+    fn test_happy_path() {
+        let (mut ctx, mut contract, _p) = setup_with_proposal();
+        // alice votes
+        update_context(&mut ctx, 0, BASE_UNIT, 10);
+        contract.vote(0, true);
+        // bob votes
+        update_context(&mut ctx, 1, BASE_UNIT, 11);
+        contract.vote(0, false);
+        // charlie votes
+        update_context(&mut ctx, 2, BASE_UNIT, 12);
+        contract.vote(0, true);
+
+        update_context(&mut ctx, 2, BASE_UNIT, 21);
+        let p = contract.proposal(0);
+        assert_eq!(p.votes_for, 6);
+        assert_eq!(p.votes_against, 3);
+        assert_eq!(p.executed, false);
+        assert_eq!(p.execute_before, 100.into());
+
+        // anyone can execute a proposal, no need to attach any deposit.
+        // must be between 31 and 100
+        update_context(&mut ctx, 4, 0, 31);
+        contract.execute(0);
+        let p = contract.proposal(0);
+        assert_eq!(p.executed, true);
+        // TODO: check account_4 balance
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal_id not found")]
+    fn test_get_proposal() {
+        let (mut ctx, mut contract) = setup_contract(5);
+        // alice creates a proposal
+        update_context(&mut ctx, 0, BASE_UNIT * 300, 1);
+        let p_in = sample_proposal();
+        let idx = contract.add_proposal(p_in.clone());
+        assert_eq!(idx, 0);
+        assert_eq!(contract.next_idx, 1);
+
+        let p = contract.proposal(0);
+        assert_eq!(
+            p,
+            ProposalOut {
+                action: p_in.action,
+                description: p_in.description,
+                voting_start: p_in.voting_start,
+                voting_end: 30.into(),
+                votes_for: 0,
+                votes_against: 0,
+                execute_before: p.execute_before,
+                executed: false
+            }
+        );
+
+        // this panics
+        contract.proposal(1);
+    }
+
+    #[test]
+    #[should_panic(expected = "voting is not active")]
+    fn test_vote_too_early() {
+        let (mut ctx, mut contract, _p_in) = setup_with_proposal();
+        // alice votes too early
+        update_context(&mut ctx, 0, BASE_UNIT, 5);
+        contract.vote(0, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "voting is not active")]
+    fn test_vote_too_late() {
+        let (mut ctx, mut contract, _p_in) = setup_with_proposal();
+        // alice votes too late
+        update_context(&mut ctx, 0, BASE_UNIT, 31);
+        contract.vote(0, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "voting is not active")]
+    fn test_vote_too_late2() {
+        let (mut ctx, mut contract, _p_in) = setup_with_proposal();
+        // alice votes too late - after execution period
+        update_context(&mut ctx, 0, BASE_UNIT, 101);
+        contract.vote(0, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "you (danny) are not authorized to vote")]
+    fn test_vote_not_authorized() {
+        let (mut ctx, mut contract, _p_in) = setup_with_proposal();
+        // danny is not authorized to vote
+        update_context(&mut ctx, 3, BASE_UNIT, 12);
+        contract.vote(0, true);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The required attached deposit is 90000000000000000000, but the given attached deposit is is 10000"
+    )]
+    fn test_vote_not_enough_deposit() {
+        let (mut ctx, mut contract, _p_in) = setup_with_proposal();
+        // alice didn't put enough deposit
+        update_context(&mut ctx, 0, 10000, 12);
+        contract.vote(0, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal didn't get enough support (got 2, required: 5)")]
+    fn test_execute_not_enough_support() {
+        let (mut ctx, mut contract, _p) = setup_with_proposal();
+        update_context(&mut ctx, 0, BASE_UNIT, 10);
+        contract.vote(0, true);
+
+        update_context(&mut ctx, 4, 0, 31);
+        contract.execute(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "vote can be executed only between 31 and 100 block")]
+    fn test_execute_too_early() {
+        let (mut ctx, mut contract, _p) = setup_with_proposal();
+        vote_alice_and_charile(&mut ctx, &mut contract);
+
+        update_context(&mut ctx, 4, 0, 30);
+        contract.execute(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "vote can be executed only between 31 and 100 block")]
+    fn test_execute_too_late() {
+        let (mut ctx, mut contract, _p) = setup_with_proposal();
+        vote_alice_and_charile(&mut ctx, &mut contract);
+
+        update_context(&mut ctx, 4, 0, 101);
+        contract.execute(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal already executed")]
+    fn test_execute_twice() {
+        let (mut ctx, mut contract, _p) = setup_with_proposal();
+        vote_alice_and_charile(&mut ctx, &mut contract);
+
+        update_context(&mut ctx, 4, 0, 40);
+        contract.execute(0);
+        update_context(&mut ctx, 4, 0, 50);
+        contract.execute(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "proposal_id not found")]
+    fn test_execute_not_found() {
+        let (mut ctx, mut contract, _p) = setup_with_proposal();
+        vote_alice_and_charile(&mut ctx, &mut contract);
+
+        update_context(&mut ctx, 4, 0, 40);
+        contract.execute(1);
+    }
+
+    #[test]
+    fn test_execute_with_exact_support() {
+        let (mut ctx, mut contract, _p) = setup_with_proposal();
+        update_context(&mut ctx, 0, BASE_UNIT, 10);
+        contract.vote(0, true);
+        update_context(&mut ctx, 1, BASE_UNIT, 10); // together, alice and bob have power=5
+        contract.vote(0, true);
+        update_context(&mut ctx, 4, 0, 40);
+        contract.execute(0);
+        let p = contract.proposal(0);
+        assert_eq!(p.executed, true);
+    }
+
+    fn vote_alice_and_charile(ctx: &mut VMContextBuilder, contract: &mut Contract) {
+        update_context(ctx, 0, BASE_UNIT, 10);
+        contract.vote(0, true);
+        update_context(ctx, 2, BASE_UNIT, 10); // charile power = 5
+        contract.vote(0, true);
     }
 
     fn sample_proposal() -> NewProposal {
         NewProposal {
             action: Action::Transfer {
-                dest: accounts(4),
+                dest: accounts(3),
                 amount: 1000.into(),
             },
-            description: "transfer to eugene".into(),
-            voting_start: 10,
+            description: "transfer to danny".into(),
+            voting_start: 10.into(),
             voting_duration: 20,
-            execute_before: 100,
+            execute_before: 100.into(),
         }
     }
 }
