@@ -88,6 +88,7 @@ impl Contract {
     and the caller have to provide a deposit = max(self.min_bond, this_tx_storage_cost).
     Once validate, the proposal is appended to the list of proposals and it's `index` is
     returned. */
+    #[payable]
     pub fn add_proposal(&mut self, p: NewProposal) -> u32 {
         let storage_start = env::storage_usage();
         self.proposals
@@ -99,11 +100,16 @@ impl Contract {
     }
 
     /**
-    Vote vote and signs a given proposal. proposal_id must be a valid and active proposal.
+    Vote vote and signs a given proposal. `proposal_id` must be a valid and active proposal.
     Proposal is active if the current block is between proposal start and end block.
     Only a valid signer (member of this multisig) can vote for a proposal. Each signer
-    can vote only once. */
-    pub fn vote(&mut self, proposal_id: u32, vote_yes: bool) {
+    can vote only once.
+    Parameters:
+    + `proposal_id`: a valid proposal ID
+    + `support`: true if you support the proposal, false otherwise.
+     */
+    #[payable]
+    pub fn vote(&mut self, proposal_id: u32, support: bool) {
         let a = env::predecessor_account_id();
         let mut voter_o: Option<&Voter> = None;
         for s in &self.members {
@@ -116,7 +122,7 @@ impl Contract {
         let idx: u64 = proposal_id.into();
         let p = &mut self.proposals.get(idx).expect("proposal_id not found");
         let storage_start = env::storage_usage();
-        p.vote(voter, vote_yes);
+        p.vote(voter, support);
         self.proposals.replace(idx, p);
         self.refund_storage(storage_start, false);
     }
@@ -495,8 +501,10 @@ mod tests {
             amount: ONE_NEAR.into(),
         })
         .unwrap();
-
         assert!(out.contains("\"Transfer\""), out);
+
+        let out = serde_json::to_string(&sample_proposal()).unwrap();
+        assert!(out.contains("\"dest\":\"danny\""), out);
     }
 
     fn vote_alice_and_charile(ctx: &mut VMContextBuilder, contract: &mut Contract) {
