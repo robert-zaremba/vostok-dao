@@ -183,6 +183,8 @@ impl Contract {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryInto;
+
     use super::*;
     use near_sdk::test_utils::{accounts, VMContextBuilder};
     use near_sdk::{testing_env, BlockHeight, MockedBlockchain};
@@ -192,6 +194,7 @@ mod tests {
 
     const BASE_UNIT: Balance = STORAGE_PRICE_PER_BYTE * 20;
     const DEFAULT_TRANSFER: Balance = 3000;
+    const ONE_NEAR: u128 = 10u128.pow(24);
 
     fn setup_contract(min_support: u32) -> (VMContextBuilder, Contract) {
         let mut context = VMContextBuilder::new();
@@ -431,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "vote can be executed only between 31 and 100 block")]
+    #[should_panic(expected = "proposal can be executed only between 31 and 100 block")]
     fn test_execute_too_early() {
         let (mut ctx, mut contract, _p) = setup_with_proposal();
         vote_alice_and_charile(&mut ctx, &mut contract);
@@ -441,7 +444,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "vote can be executed only between 31 and 100 block")]
+    #[should_panic(expected = "proposal can be executed only between 31 and 100 block")]
     fn test_execute_too_late() {
         let (mut ctx, mut contract, _p) = setup_with_proposal();
         vote_alice_and_charile(&mut ctx, &mut contract);
@@ -483,6 +486,17 @@ mod tests {
         contract.execute(0);
         let p = contract.proposal(0);
         assert_eq!(p.executed, true);
+    }
+
+    #[test]
+    fn test_check_action_serialization() {
+        let out = serde_json::to_string_pretty(&Action::Transfer {
+            dest: "me.near".try_into().unwrap(),
+            amount: ONE_NEAR.into(),
+        })
+        .unwrap();
+
+        assert!(out.contains("\"Transfer\""), out);
     }
 
     fn vote_alice_and_charile(ctx: &mut VMContextBuilder, contract: &mut Contract) {
