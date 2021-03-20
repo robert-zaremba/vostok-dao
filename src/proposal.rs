@@ -10,6 +10,8 @@ use near_sdk::json_types::{ValidAccountId, U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, AccountId, Balance, Promise};
 
+pub(crate) const FROM_NANO: u64 = 1_000_000_000;
+
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Voter {
@@ -77,8 +79,9 @@ pub struct Proposal {
     pub description: String,
     pub action: ActionInt,
     pub voters: HashSet<AccountId>,
-    /// block number when voting started
+    /// Block timestamp in seconds when voting starts.
     pub voting_start: u64,
+    /// Block timestamp in seconds when voting ends.
     pub voting_end: u64,
     pub votes_for: u32,
     pub votes_against: u32,
@@ -88,9 +91,9 @@ pub struct Proposal {
 
 impl Proposal {
     pub fn vote(&mut self, voter: &Voter, vote_yes: bool) {
-        let b = env::block_index();
+        let t: u64 = env::block_timestamp() / FROM_NANO;
         assert!(
-            self.voting_start <= b && self.voting_end >= b,
+            self.voting_start <= t && self.voting_end >= t,
             "voting is not active"
         );
         assert!(
@@ -106,10 +109,10 @@ impl Proposal {
     }
 
     pub fn execute(&mut self, min_support: u32) -> Promise {
-        let b = env::block_index();
+        let t: u64 = env::block_timestamp() / FROM_NANO;
         assert!(
-            self.voting_end < b && b <= self.execute_before,
-            "proposal can be executed only between {} and {} block",
+            self.voting_end < t && t <= self.execute_before,
+            "proposal can be executed only between {} and {} timestamp [seconds]",
             self.voting_end + 1,
             self.execute_before
         );
@@ -136,48 +139,45 @@ impl Proposal {
     }
 }
 
-#[cfg(test)]
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(crate = "near_sdk::serde")]
-pub struct NewProposal {
-    pub action: Action,
-    pub description: String,
-    /// block number when voting started
-    pub voting_start: U64,
-    /// voting duration in number of blocks
-    pub voting_duration: u32,
-    /// last block number when the proposal can be executed. Must be bigger than
-    /// `voting_start + voting_duration`
-    pub execute_before: U64,
-}
-
 /// NewProposal is an input to create a new `Proposal`.
-/// + `voting_start` must be after the current block number.
-/// + `voting_duration` must be between `Contract.min_duration` and `Contract.max_duration`.
-/// + `execute_before` is a last block number when the proposal can be closed and executed.
-///    Must be after `voting_start + voting_duration`.
 #[cfg(not(test))]
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct NewProposal {
     pub action: Action,
     pub description: String,
-    /// block number when voting started
+    /// Unix timestamp (in seconds) when the voting starts.
+    /// Must be bigger than current block timestamp.
     pub voting_start: U64,
-    /// voting duration in number of blocks
+    /// Voting duration in seconds. Must be between
+    /// `Contract.min_duration` and `Contract.max_duration`.
     pub voting_duration: u32,
-    /// last block number when the proposal can be executed. Must be bigger than
-    /// `voting_start + voting_duration`
+    /// Last block timestamp (in seconds) when the proposal can be executed.
+    /// Must be bigger than `voting_start + voting_duration`.
+    pub execute_before: U64,
+}
+
+#[cfg(test)]
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+pub struct NewProposal {
+    pub action: Action,
+    pub description: String,
+    pub voting_start: U64,
+    pub voting_duration: u32,
     pub execute_before: U64,
 }
 
 impl NewProposal {
+    /// `min_duration` and `max_duration` is expressed in seconds.
     pub fn into_proposal(&self, min_duration: u32, max_duration: u32) -> Proposal {
         let voting_start = u64::from(self.voting_start);
         let execute_before = u64::from(self.execute_before);
+        let t: u64 = env::block_timestamp() / FROM_NANO;
         assert!(
-            voting_start > env::block_index(),
-            "voting_start must be after current block"
+            voting_start > t,
+            "voting_start must be after current block timestmap: {}sec",
+            t
         );
         assert!(
             min_duration <= self.voting_duration && self.voting_duration <= max_duration,

@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use near_sdk::json_types::U128;
+use near_sdk::json_types::{U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::AccountId;
 
@@ -18,4 +18,5 @@ pub struct Settings {
     pub min_duration: u32,
     pub max_duration: u32,
     pub min_bond: U128,
+    pub unix_time: U64,
 }

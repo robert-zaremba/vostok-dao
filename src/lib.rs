@@ -4,7 +4,7 @@
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::Vector;
-use near_sdk::json_types::U128;
+use near_sdk::json_types::{U128, U64};
 use near_sdk::{env, log, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage};
 
 pub mod proposal;
@@ -26,7 +26,7 @@ pub struct Contract {
     /// minimum support (in power) to pass the call
     min_support: u32,
     /// Each proposal voting duration must be between `min_duration` and `max_duration` expressed
-    /// in number of blocks. Both values must be >= 2.
+    /// in number of seconds. Both values must be >= 2.
     min_duration: u32,
     max_duration: u32,
     min_bond: Balance,
@@ -42,8 +42,8 @@ impl Contract {
     Parameters:
     + `members`: list of signers (voters) for this multisig wallet.
     + `min_support`: minimum support a proposal have to get (in power votes) to pass.
-    + `min_duration`: minimum voting time (in number of blocks) for a new proposal.
-    + `max_duration`: maximum voting time (in number of blocks) for a new proposal.
+    + `min_duration`: minimum voting time (in number of seconds) for a new proposal.
+    + `max_duration`: maximum voting time (in number of seconds) for a new proposal.
     + `min_bond`: minimum deposit a caller have to put to create a new proposal. It includes
        the storage fees.
     + NOTE: this parameters are binding for all proposals and can't be changed in the future. */
@@ -55,7 +55,6 @@ impl Contract {
         max_duration: u32,
         min_bond: U128,
     ) -> Self {
-        assert!(!env::state_exists(), "ERR_CONTRACT_IS_INITIALIZED");
         assert!(min_support > 0, "min_support must be positive");
         for s in &members {
             assert_valid_account(&s.account);
@@ -76,7 +75,7 @@ impl Contract {
             min_support,
             min_duration,
             max_duration,
-            min_bond: min_bond,
+            min_bond,
             next_idx: 0,
             proposals: Vector::new("p".into()),
         }
@@ -93,7 +92,11 @@ impl Contract {
         let storage_start = env::storage_usage();
         self.proposals
             .push(&p.into_proposal(self.min_duration, self.max_duration));
-        log!("New proposal added, id={}.", self.next_idx);
+        log!(
+            "New proposal added at timestamp={}seconds, id={}.",
+            env::block_timestamp(),
+            self.next_idx
+        );
         self.next_idx += 1;
         self.refund_storage(storage_start, true);
         return self.next_idx - 1;
@@ -158,6 +161,7 @@ impl Contract {
             min_duration: self.min_duration,
             max_duration: self.max_duration,
             min_bond: self.min_bond.into(),
+            unix_time: U64::from(env::block_timestamp() / FROM_NANO),
         }
     }
 
@@ -193,7 +197,7 @@ mod tests {
 
     use super::*;
     use near_sdk::test_utils::{accounts, VMContextBuilder};
-    use near_sdk::{testing_env, BlockHeight, MockedBlockchain};
+    use near_sdk::{testing_env, MockedBlockchain};
 
     mod tutils;
     use crate::tests::tutils::deserialize_receipts;
@@ -227,16 +231,11 @@ mod tests {
         (context, contract)
     }
 
-    fn update_context(
-        ctx: &mut VMContextBuilder,
-        account: u8,
-        deposit: Balance,
-        block: BlockHeight,
-    ) {
+    fn update_context(ctx: &mut VMContextBuilder, account: u8, deposit: Balance, timestamp: u64) {
         testing_env!(ctx
             .predecessor_account_id(accounts(account.into()))
             .attached_deposit(deposit)
-            .block_index(block)
+            .block_timestamp(timestamp * FROM_NANO)
             .build());
     }
 
@@ -440,7 +439,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "proposal can be executed only between 31 and 100 block")]
+    #[should_panic(
+        expected = "proposal can be executed only between 31 and 100 timestamp [seconds]"
+    )]
     fn test_execute_too_early() {
         let (mut ctx, mut contract, _p) = setup_with_proposal();
         vote_alice_and_charile(&mut ctx, &mut contract);
@@ -450,7 +451,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "proposal can be executed only between 31 and 100 block")]
+    #[should_panic(
+        expected = "proposal can be executed only between 31 and 100 timestamp [seconds]"
+    )]
     fn test_execute_too_late() {
         let (mut ctx, mut contract, _p) = setup_with_proposal();
         vote_alice_and_charile(&mut ctx, &mut contract);
