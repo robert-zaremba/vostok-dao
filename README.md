@@ -15,8 +15,8 @@ Version 1: [Done]
 + Simple DAO (fixed signers / voters)
 + NEAR transfers.
 
-Version 2:
-+ Fungible Token (NEP-141) transfers.
+Version 2 - (in a new project):
++ Fungible Token (NEP-141) voting (stake + vote).
 
 
 ## Name
