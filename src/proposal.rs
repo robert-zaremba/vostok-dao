@@ -28,16 +28,8 @@ pub enum ActionInt {
 }
 
 /// Action is a JSON compatible type for encodidng actions
-#[cfg(not(test))]
 #[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-pub enum Action {
-    Transfer { dest: ValidAccountId, amount: U128 },
-    Delete { dest: ValidAccountId },
-}
-
-#[cfg(test)]
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "test", derive(Clone, Debug, PartialEq))]
 #[serde(crate = "near_sdk::serde")]
 pub enum Action {
     Transfer { dest: ValidAccountId, amount: U128 },
@@ -140,8 +132,8 @@ impl Proposal {
 }
 
 /// NewProposal is an input to create a new `Proposal`.
-#[cfg(not(test))]
 #[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "test", derive(Clone))]
 #[serde(crate = "near_sdk::serde")]
 pub struct NewProposal {
     pub action: Action,
@@ -154,17 +146,6 @@ pub struct NewProposal {
     pub voting_duration: u32,
     /// Last block timestamp (in seconds) when the proposal can be executed.
     /// Must be bigger than `voting_start + voting_duration`.
-    pub execute_before: U64,
-}
-
-#[cfg(test)]
-#[derive(Serialize, Deserialize, Clone)]
-#[serde(crate = "near_sdk::serde")]
-pub struct NewProposal {
-    pub action: Action,
-    pub description: String,
-    pub voting_start: U64,
-    pub voting_duration: u32,
     pub execute_before: U64,
 }
 
@@ -205,25 +186,9 @@ impl NewProposal {
     }
 }
 
-#[cfg(test)]
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-#[serde(crate = "near_sdk::serde")]
-pub struct ProposalOut {
-    pub action: Action,
-    pub description: String,
-    /// block number when voting started
-    pub voting_start: U64,
-    /// voting duration in number of blocks
-    pub voting_end: U64,
-    pub votes_for: u32,
-    pub votes_against: u32,
-    pub execute_before: U64,
-    pub executed: bool,
-}
-
 /// JSON compatible return type for Proposal.
-#[cfg(not(test))]
 #[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "test", derive(Debug, PartialEq))]
 #[serde(crate = "near_sdk::serde")]
 pub struct ProposalOut {
     pub action: Action,
