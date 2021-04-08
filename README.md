@@ -5,6 +5,11 @@ It's made for humans to execute NEAR transfers.
 
 For more complex functionality or complex DAOs you should probably look at the [Sputnik DAO](https://github.com/near-daos/sputnik-dao-contract).
 
+## Documentation
+
+* [Guide](docs/guide-v1.md)
+* API [docs](docs/index.html)
+
 ## Status
 
 Beta. Unit tests done.
