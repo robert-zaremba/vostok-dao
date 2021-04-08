@@ -8,7 +8,7 @@ For more complex functionality or complex DAOs you should probably look at the [
 ## Documentation
 
 * [Guide](docs/guide-v1.md)
-* API [docs](docs/index.html)
+* API [docs](https://blog.zaremba.ch/vostok-dao/vostok_dao/index.html)
 
 ## Status
 
