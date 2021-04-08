@@ -41,7 +41,8 @@ Firstly we need to decide about the DAO parameters:
 We will deploy a contract with `min_duration=10min` and `max_duration=3days`:
 
 ```
-near --nodeUrl=$NEAR_NODE deploy --wasmFile ./res/vostok_dao.wasm --accountId $CTR  --initFunction "new" --initArgs '{"members": [{"account": "alice.guildnet", "power": 2}, {"account": "bob.guildnet", "power": 3}, {"account": "charlie.guildnet", "power": 4}], "min_support": 5, "min_duration": 600, "max_duration": 259200, "min_bond": "100000000000000000000000"}'
+near --nodeUrl=$NEAR_NODE deploy --wasmFile ./res/vostok_dao.wasm --accountId $CTR  --initFunction "new" --initArgs \
+  '{"members": [{"account": "alice.guildnet", "power": 2}, {"account": "bob.guildnet", "power": 3}, {"account": "charlie.guildnet", "power": 4}], "min_support": 5, "min_duration": 600, "max_duration": 259200, "min_bond": "100000000000000000000000"}'
 ```
 
 NOTE:
@@ -58,7 +59,8 @@ near --nodeUrl=$NEAR_NODE view $CTR settings
 Alice creates a proposal to send 10 NEAR from the DAO:
 
 ```
-near --nodeUrl=$NEAR_NODE --accountId $ALICE --amount 1 call $CTR add_proposal '{"p": {"action": {"Transfer": {"dest": "alice.guildnet", "amount": "10000000000000000000000000"}}, "description": "Send 10 NEAR to Alice", "voting_start": "1616275254", "voting_duration": 700, "execute_before": "1616276254"}}'
+near --nodeUrl=$NEAR_NODE --accountId $ALICE --amount 1 call $CTR add_proposal \
+  '{"p": {"action": {"Transfer": {"dest": "alice.guildnet", "amount": "10000000000000000000000000"}}, "description": "Send 10 NEAR to Alice", "voting_start": "1616275254", "voting_duration": 700, "execute_before": "1616276254"}}'
 ```
 
 * `voting_start`: is the [Unix timestamp](https://www.unixtimestamp.com/) when the voting starts. NOTE: it's not the same as `env::block_timestamp()` which is measured in nanoseconds.
